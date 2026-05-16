@@ -1,0 +1,2210 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: HiddenFreeways API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication and invites
+  - name: states
+    description: US states
+  - name: categories
+    description: Forum categories
+  - name: locations
+    description: Urbex locations pinned to maps
+  - name: threads
+    description: Forum threads
+  - name: posts
+    description: Thread posts (replies)
+  - name: feed
+    description: Feeds and recent activity
+  - name: admin
+    description: Admin-only management endpoints
+  - name: announcements
+    description: Pinned announcements
+  - name: votes
+    description: Up/downvotes on threads and posts
+  - name: chat
+    description: Public chat rooms
+  - name: crews
+    description: Private crews planning trips
+  - name: dms
+    description: Private direct messages
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  # ------------------- AUTH -------------------
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Log in with username and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginBody"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentUser"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Log the current session out
+      responses:
+        "204":
+          description: Logged out
+
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Get the current logged-in user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentUser"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/redeem-invite:
+    post:
+      operationId: redeemInvite
+      tags: [auth]
+      summary: Redeem an invite code and create a new account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RedeemInviteBody"
+      responses:
+        "201":
+          description: Account created and logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentUser"
+        "400":
+          description: Invalid invite or username taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/invite-info/{code}:
+    get:
+      operationId: getInviteInfo
+      tags: [auth]
+      summary: Look up an invite code (does not consume it)
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Invite valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InviteInfo"
+        "404":
+          description: Invite not found or already used
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ------------------- STATES -------------------
+  /states:
+    get:
+      operationId: listStates
+      tags: [states]
+      summary: List all states with location counts
+      responses:
+        "200":
+          description: List of states
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StateSummary"
+
+  /states/{slug}:
+    get:
+      operationId: getStateBySlug
+      tags: [states]
+      summary: Get a state by slug with its locations and pinned threads
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: State detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StateDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ------------------- CATEGORIES -------------------
+  /categories:
+    get:
+      operationId: listCategories
+      tags: [categories]
+      summary: List all forum categories with thread counts
+      responses:
+        "200":
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CategorySummary"
+
+  /categories/{slug}:
+    get:
+      operationId: getCategoryBySlug
+      tags: [categories]
+      summary: Get a category and its threads
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Category detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ------------------- LOCATIONS -------------------
+  /locations:
+    get:
+      operationId: listLocations
+      tags: [locations]
+      summary: List locations, optionally filtered by state
+      parameters:
+        - name: stateSlug
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Locations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Location"
+    post:
+      operationId: createLocation
+      tags: [locations]
+      summary: Add a new urbex location
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLocationBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Location"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /locations/{id}:
+    get:
+      operationId: getLocation
+      tags: [locations]
+      summary: Get a single location with its threads
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Location detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ------------------- THREADS -------------------
+  /threads:
+    get:
+      operationId: listThreads
+      tags: [threads]
+      summary: List threads with optional filters
+      parameters:
+        - name: categorySlug
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: locationId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: stateSlug
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: pinnedOnly
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of threads
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ThreadSummary"
+    post:
+      operationId: createThread
+      tags: [threads]
+      summary: Start a new thread
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateThreadBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Thread"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /threads/{id}:
+    get:
+      operationId: getThread
+      tags: [threads]
+      summary: Get a thread with its posts
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Thread detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThreadDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /threads/{id}/posts:
+    post:
+      operationId: createPost
+      tags: [posts]
+      summary: Reply to a thread
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePostBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ------------------- FEED -------------------
+  /feed/recent:
+    get:
+      operationId: getRecentActivity
+      tags: [feed]
+      summary: Get recent forum activity (latest threads + replies)
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
+  /feed/stats:
+    get:
+      operationId: getForumStats
+      tags: [feed]
+      summary: Get high-level forum stats
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForumStats"
+
+  # ------------------- ADMIN -------------------
+  /admin/users:
+    get:
+      operationId: adminListUsers
+      tags: [admin]
+      summary: List all users (admin only)
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminUser"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users/{id}:
+    patch:
+      operationId: adminUpdateUser
+      tags: [admin]
+      summary: Update user role or ban status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUpdateUserBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUser"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/invites:
+    get:
+      operationId: adminListInvites
+      tags: [admin]
+      summary: List all invites
+      responses:
+        "200":
+          description: Invites
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invite"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: adminCreateInvite
+      tags: [admin]
+      summary: Generate a new invite code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCreateInviteBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invite"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/invites/{id}:
+    delete:
+      operationId: adminRevokeInvite
+      tags: [admin]
+      summary: Revoke an unused invite
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Revoked
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/categories:
+    post:
+      operationId: adminCreateCategory
+      tags: [admin]
+      summary: Create a category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCategoryBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/categories/{id}:
+    patch:
+      operationId: adminUpdateCategory
+      tags: [admin]
+      summary: Update a category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCategoryBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: adminDeleteCategory
+      tags: [admin]
+      summary: Delete a category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/states:
+    post:
+      operationId: adminCreateState
+      tags: [admin]
+      summary: Create a state
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminStateBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/State"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/states/{id}:
+    patch:
+      operationId: adminUpdateState
+      tags: [admin]
+      summary: Update a state
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminStateBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/State"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: adminDeleteState
+      tags: [admin]
+      summary: Delete a state
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/locations/{id}:
+    patch:
+      operationId: adminUpdateLocation
+      tags: [admin]
+      summary: Update a location
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUpdateLocationBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Location"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: adminDeleteLocation
+      tags: [admin]
+      summary: Delete a location
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/threads/{id}/pin:
+    post:
+      operationId: adminPinThread
+      tags: [admin]
+      summary: Toggle pinned status of a thread
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminPinThreadBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Thread"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/threads/{id}:
+    delete:
+      operationId: adminDeleteThread
+      tags: [admin]
+      summary: Delete a thread
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ------------------- ANNOUNCEMENTS -------------------
+  /announcements:
+    get:
+      operationId: listAnnouncements
+      tags: [announcements]
+      summary: List active pinned announcements
+      responses:
+        "200":
+          description: Active announcements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Announcement"
+    post:
+      operationId: createAnnouncement
+      tags: [admin, announcements]
+      summary: Create a new announcement (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAnnouncementBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Announcement"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /announcements/{id}:
+    delete:
+      operationId: deleteAnnouncement
+      tags: [admin, announcements]
+      summary: Delete an announcement (admin only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ------------------- VOTES -------------------
+  /threads/{id}/vote:
+    post:
+      operationId: voteOnThread
+      tags: [votes]
+      summary: Up/downvote (or clear vote on) a thread
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VoteBody"
+      responses:
+        "200":
+          description: Updated vote totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoteResult"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /posts/{id}/vote:
+    post:
+      operationId: voteOnPost
+      tags: [votes]
+      summary: Up/downvote (or clear vote on) a post
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VoteBody"
+      responses:
+        "200":
+          description: Updated vote totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoteResult"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ------------------- CHAT ROOMS -------------------
+  /chat/rooms:
+    get:
+      operationId: listChatRooms
+      tags: [chat]
+      summary: List chat rooms accessible to current user
+      responses:
+        "200":
+          description: Rooms
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChatRoom"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createChatRoom
+      tags: [admin, chat]
+      summary: Create a chat room (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChatRoomBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatRoom"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /chat/rooms/{slug}/messages:
+    get:
+      operationId: listRoomMessages
+      tags: [chat]
+      summary: List recent messages for a chat room
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+        - in: query
+          name: sinceId
+          required: false
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomMessagesResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Room not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: sendRoomMessage
+      tags: [chat]
+      summary: Send a chat message into a room
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendChatMessageBody"
+      responses:
+        "201":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomMessage"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ------------------- CREWS -------------------
+  /crews:
+    get:
+      operationId: listCrews
+      tags: [crews]
+      summary: List crews the current user is in
+      responses:
+        "200":
+          description: Crews
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Crew"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createCrew
+      tags: [crews]
+      summary: Create a new crew
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCrewBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Crew"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /crews/{id}/messages:
+    get:
+      operationId: listCrewMessages
+      tags: [crews]
+      summary: List recent messages for a crew chat
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: sinceId
+          required: false
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomMessagesResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not a member of this crew
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: sendCrewMessage
+      tags: [crews]
+      summary: Send a message in a crew chat
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendChatMessageBody"
+      responses:
+        "201":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomMessage"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not a member of this crew
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ------------------- PRIVATE MESSAGES -------------------
+  /messages:
+    get:
+      operationId: listPrivateChats
+      tags: [dms]
+      summary: List the current user's private chats
+      responses:
+        "200":
+          description: DM threads
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PrivateChatSummary"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: openPrivateChat
+      tags: [dms]
+      summary: Open or create a private chat with another user (by username)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenPrivateChatBody"
+      responses:
+        "200":
+          description: Existing chat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrivateChatSummary"
+        "201":
+          description: Created chat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrivateChatSummary"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /messages/{id}:
+    get:
+      operationId: listPrivateChatMessages
+      tags: [dms]
+      summary: Get messages in a private chat
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: sinceId
+          required: false
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomMessagesResponse"
+        "403":
+          description: Not a participant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: sendPrivateChatMessage
+      tags: [dms]
+      summary: Send a private message in a chat
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendChatMessageBody"
+      responses:
+        "201":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomMessage"
+        "403":
+          description: Not a participant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required: [status]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    # ---------- AUTH ----------
+    LoginBody:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      required: [username, password]
+
+    RedeemInviteBody:
+      type: object
+      properties:
+        code:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
+      required: [code, username, password]
+
+    InviteInfo:
+      type: object
+      properties:
+        code:
+          type: string
+        note:
+          type: ["string", "null"]
+        invitedBy:
+          type: ["string", "null"]
+      required: [code, note, invitedBy]
+
+    CurrentUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        role:
+          type: string
+          enum: [admin, member]
+        avatarUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, username, role, avatarUrl, createdAt]
+
+    # ---------- STATES ----------
+    State:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        name:
+          type: string
+        abbreviation:
+          type: string
+        centerLat:
+          type: number
+        centerLng:
+          type: number
+        zoom:
+          type: integer
+      required: [id, slug, name, abbreviation, centerLat, centerLng, zoom]
+
+    StateSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        name:
+          type: string
+        abbreviation:
+          type: string
+        centerLat:
+          type: number
+        centerLng:
+          type: number
+        zoom:
+          type: integer
+        locationCount:
+          type: integer
+        threadCount:
+          type: integer
+      required: [id, slug, name, abbreviation, centerLat, centerLng, zoom, locationCount, threadCount]
+
+    StateDetail:
+      type: object
+      properties:
+        state:
+          $ref: "#/components/schemas/State"
+        locations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Location"
+        pinnedThreads:
+          type: array
+          items:
+            $ref: "#/components/schemas/ThreadSummary"
+      required: [state, locations, pinnedThreads]
+
+    # ---------- CATEGORIES ----------
+    Category:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        icon:
+          type: ["string", "null"]
+        sortOrder:
+          type: integer
+      required: [id, slug, name, description, icon, sortOrder]
+
+    CategorySummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        icon:
+          type: ["string", "null"]
+        sortOrder:
+          type: integer
+        threadCount:
+          type: integer
+        postCount:
+          type: integer
+        latestThread:
+          oneOf:
+            - $ref: "#/components/schemas/ThreadSummary"
+            - type: "null"
+      required: [id, slug, name, description, icon, sortOrder, threadCount, postCount, latestThread]
+
+    CategoryDetail:
+      type: object
+      properties:
+        category:
+          $ref: "#/components/schemas/Category"
+        threads:
+          type: array
+          items:
+            $ref: "#/components/schemas/ThreadSummary"
+      required: [category, threads]
+
+    # ---------- LOCATIONS ----------
+    Location:
+      type: object
+      properties:
+        id:
+          type: integer
+        stateId:
+          type: integer
+        stateSlug:
+          type: string
+        stateName:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        city:
+          type: ["string", "null"]
+        latitude:
+          type: number
+        longitude:
+          type: number
+        status:
+          type: string
+          enum: [active, demolished, sealed, watched]
+        risk:
+          type: string
+          enum: [low, medium, high, extreme]
+        createdById:
+          type: integer
+        createdByUsername:
+          type: string
+        threadCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - stateId
+        - stateSlug
+        - stateName
+        - name
+        - description
+        - city
+        - latitude
+        - longitude
+        - status
+        - risk
+        - createdById
+        - createdByUsername
+        - threadCount
+        - createdAt
+
+    LocationDetail:
+      type: object
+      properties:
+        location:
+          $ref: "#/components/schemas/Location"
+        threads:
+          type: array
+          items:
+            $ref: "#/components/schemas/ThreadSummary"
+      required: [location, threads]
+
+    CreateLocationBody:
+      type: object
+      properties:
+        stateId:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        city:
+          type: ["string", "null"]
+        latitude:
+          type: number
+        longitude:
+          type: number
+        status:
+          type: string
+          enum: [active, demolished, sealed, watched]
+        risk:
+          type: string
+          enum: [low, medium, high, extreme]
+      required: [stateId, name, description, latitude, longitude, status, risk]
+
+    AdminUpdateLocationBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        city:
+          type: ["string", "null"]
+        latitude:
+          type: number
+        longitude:
+          type: number
+        status:
+          type: string
+          enum: [active, demolished, sealed, watched]
+        risk:
+          type: string
+          enum: [low, medium, high, extreme]
+
+    # ---------- THREADS ----------
+    Thread:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        body:
+          type: string
+        categoryId:
+          type: integer
+        categorySlug:
+          type: string
+        categoryName:
+          type: string
+        locationId:
+          type: ["integer", "null"]
+        locationName:
+          type: ["string", "null"]
+        stateId:
+          type: ["integer", "null"]
+        stateSlug:
+          type: ["string", "null"]
+        authorId:
+          type: integer
+        authorUsername:
+          type: string
+        authorAvatarUrl:
+          type: ["string", "null"]
+        isPinned:
+          type: boolean
+        isLocked:
+          type: boolean
+        viewCount:
+          type: integer
+        replyCount:
+          type: integer
+        lastActivityAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - title
+        - body
+        - categoryId
+        - categorySlug
+        - categoryName
+        - locationId
+        - locationName
+        - stateId
+        - stateSlug
+        - authorId
+        - authorUsername
+        - authorAvatarUrl
+        - isPinned
+        - isLocked
+        - viewCount
+        - replyCount
+        - lastActivityAt
+        - createdAt
+
+    ThreadSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        excerpt:
+          type: string
+        categoryId:
+          type: integer
+        categorySlug:
+          type: string
+        categoryName:
+          type: string
+        locationId:
+          type: ["integer", "null"]
+        locationName:
+          type: ["string", "null"]
+        stateSlug:
+          type: ["string", "null"]
+        authorId:
+          type: integer
+        authorUsername:
+          type: string
+        authorAvatarUrl:
+          type: ["string", "null"]
+        isPinned:
+          type: boolean
+        isLocked:
+          type: boolean
+        replyCount:
+          type: integer
+        lastActivityAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - title
+        - excerpt
+        - categoryId
+        - categorySlug
+        - categoryName
+        - locationId
+        - locationName
+        - stateSlug
+        - authorId
+        - authorUsername
+        - authorAvatarUrl
+        - isPinned
+        - isLocked
+        - replyCount
+        - lastActivityAt
+        - createdAt
+
+    ThreadDetail:
+      type: object
+      properties:
+        thread:
+          $ref: "#/components/schemas/Thread"
+        posts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Post"
+      required: [thread, posts]
+
+    CreateThreadBody:
+      type: object
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+        categoryId:
+          type: integer
+        locationId:
+          type: ["integer", "null"]
+      required: [title, body, categoryId]
+
+    # ---------- POSTS ----------
+    Post:
+      type: object
+      properties:
+        id:
+          type: integer
+        threadId:
+          type: integer
+        body:
+          type: string
+        authorId:
+          type: integer
+        authorUsername:
+          type: string
+        authorAvatarUrl:
+          type: ["string", "null"]
+        authorRole:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - threadId
+        - body
+        - authorId
+        - authorUsername
+        - authorAvatarUrl
+        - authorRole
+        - createdAt
+
+    CreatePostBody:
+      type: object
+      properties:
+        body:
+          type: string
+      required: [body]
+
+    # ---------- FEED ----------
+    ActivityItem:
+      type: object
+      properties:
+        threadId:
+          type: integer
+        threadTitle:
+          type: string
+        categorySlug:
+          type: string
+        categoryName:
+          type: string
+        actorUsername:
+          type: string
+        actorAvatarUrl:
+          type: ["string", "null"]
+        kind:
+          type: string
+          enum: [thread, reply]
+        excerpt:
+          type: string
+        at:
+          type: string
+          format: date-time
+      required:
+        - threadId
+        - threadTitle
+        - categorySlug
+        - categoryName
+        - actorUsername
+        - actorAvatarUrl
+        - kind
+        - excerpt
+        - at
+
+    ForumStats:
+      type: object
+      properties:
+        memberCount:
+          type: integer
+        threadCount:
+          type: integer
+        postCount:
+          type: integer
+        locationCount:
+          type: integer
+        stateCount:
+          type: integer
+        newestMember:
+          type: ["string", "null"]
+      required: [memberCount, threadCount, postCount, locationCount, stateCount, newestMember]
+
+    # ---------- ADMIN ----------
+    AdminUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        role:
+          type: string
+          enum: [admin, member]
+        isBanned:
+          type: boolean
+        threadCount:
+          type: integer
+        postCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, username, role, isBanned, threadCount, postCount, createdAt]
+
+    AdminUpdateUserBody:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [admin, member]
+        isBanned:
+          type: boolean
+
+    Invite:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        note:
+          type: ["string", "null"]
+        createdById:
+          type: integer
+        createdByUsername:
+          type: string
+        usedById:
+          type: ["integer", "null"]
+        usedByUsername:
+          type: ["string", "null"]
+        usedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - code
+        - note
+        - createdById
+        - createdByUsername
+        - usedById
+        - usedByUsername
+        - usedAt
+        - createdAt
+
+    AdminCreateInviteBody:
+      type: object
+      properties:
+        note:
+          type: ["string", "null"]
+
+    AdminCategoryBody:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        icon:
+          type: ["string", "null"]
+        sortOrder:
+          type: integer
+      required: [name, slug, description, sortOrder]
+
+    AdminStateBody:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        abbreviation:
+          type: string
+        centerLat:
+          type: number
+        centerLng:
+          type: number
+        zoom:
+          type: integer
+      required: [name, slug, abbreviation, centerLat, centerLng, zoom]
+
+    AdminPinThreadBody:
+      type: object
+      properties:
+        isPinned:
+          type: boolean
+      required: [isPinned]
+
+    Announcement:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        body:
+          type: string
+        kind:
+          type: string
+          enum: [info, warning, alert]
+        priority:
+          type: integer
+        isActive:
+          type: boolean
+        createdById:
+          type: integer
+        createdByUsername:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - title
+        - body
+        - kind
+        - priority
+        - isActive
+        - createdById
+        - createdByUsername
+        - createdAt
+
+    CreateAnnouncementBody:
+      type: object
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+        kind:
+          type: string
+          enum: [info, warning, alert]
+        priority:
+          type: integer
+      required: [title, body]
+
+    VoteBody:
+      type: object
+      properties:
+        value:
+          type: string
+          enum: [up, down, none]
+      required: [value]
+
+    VoteResult:
+      type: object
+      properties:
+        upvotes:
+          type: integer
+        downvotes:
+          type: integer
+        score:
+          type: integer
+        myVote:
+          type: string
+          enum: [up, down, none]
+      required: [upvotes, downvotes, score, myVote]
+
+    ChatRoom:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        kind:
+          type: string
+          enum: [public, state, trusted]
+        stateId:
+          type: ["integer", "null"]
+        stateSlug:
+          type: ["string", "null"]
+        minTrustLevel:
+          type: integer
+        isArchived:
+          type: boolean
+        memberCount:
+          type: integer
+        lastMessageAt:
+          type: ["string", "null"]
+          format: date-time
+      required:
+        - id
+        - slug
+        - name
+        - description
+        - kind
+        - stateId
+        - stateSlug
+        - minTrustLevel
+        - isArchived
+        - memberCount
+        - lastMessageAt
+
+    CreateChatRoomBody:
+      type: object
+      properties:
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        kind:
+          type: string
+          enum: [public, state, trusted]
+        stateId:
+          type: ["integer", "null"]
+        minTrustLevel:
+          type: integer
+      required: [slug, name, description, kind]
+
+    RoomMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        body:
+          type: string
+        authorId:
+          type: integer
+        authorUsername:
+          type: string
+        authorTrustLevel:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - body
+        - authorId
+        - authorUsername
+        - authorTrustLevel
+        - createdAt
+
+    RoomMessagesResponse:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoomMessage"
+      required: [messages]
+
+    SendChatMessageBody:
+      type: object
+      properties:
+        body:
+          type: string
+      required: [body]
+
+    Crew:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        creatorId:
+          type: integer
+        creatorUsername:
+          type: string
+        roomId:
+          type: integer
+        memberCount:
+          type: integer
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/CrewMember"
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - description
+        - creatorId
+        - creatorUsername
+        - roomId
+        - memberCount
+        - members
+        - createdAt
+
+    CrewMember:
+      type: object
+      properties:
+        userId:
+          type: integer
+        username:
+          type: string
+        trustLevel:
+          type: integer
+        joinedAt:
+          type: string
+          format: date-time
+      required: [userId, username, trustLevel, joinedAt]
+
+    CreateCrewBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        memberUsernames:
+          type: array
+          items:
+            type: string
+      required: [name]
+
+    PrivateChatSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        otherUserId:
+          type: integer
+        otherUsername:
+          type: string
+        otherTrustLevel:
+          type: integer
+        lastMessageBody:
+          type: ["string", "null"]
+        lastActivityAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - otherUserId
+        - otherUsername
+        - otherTrustLevel
+        - lastMessageBody
+        - lastActivityAt
+
+    OpenPrivateChatBody:
+      type: object
+      properties:
+        username:
+          type: string
+      required: [username]
