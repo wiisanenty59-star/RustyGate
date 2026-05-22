@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
 import { useGetCurrentUser } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
@@ -15,11 +16,11 @@ import {
 import { formatDistanceToNow, format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
-type CrewMember = { userId: number; username: string; trustLevel: number; joinedAt: string };
+type CrewMember = { userId: number; username: string; trustLevel: number; joinedAt: string; latitude?: number; longitude?: number; lastCheckinAt?: string };
 type Crew = {
   id: number; name: string; description: string; creatorId: number; creatorUsername: string;
   roomId: number; memberCount: number; members: CrewMember[];
-  meetupAt: string | null; meetupNote: string | null; createdAt: string;
+  meetupAt: string | null; meetupNote: string | null; meetupLatitude?: number; meetupLongitude?: number; createdAt: string;
 };
 type RoomMessage = {
   id: number; body: string; authorId: number; authorUsername: string;
@@ -61,6 +62,7 @@ export default function CrewsPage() {
   const [crews, setCrews] = useState<Crew[]>([]);
   const [selected, setSelected] = useState<Crew | null>(null);
   const { data: user } = useGetCurrentUser();
+  const [, navigate] = useLocation();
   const { data: onlineData } = useOnlineUsers();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(""); const [description, setDescription] = useState(""); const [memberInput, setMemberInput] = useState("");
@@ -117,24 +119,43 @@ export default function CrewsPage() {
             <Users size={14} style={{ color: "#e8760a" }} />
             <span style={{ color: "#ffffff", fontWeight: 700, fontSize: 13, fontFamily: "system-ui, sans-serif" }}>Crews</span>
           </div>
-          {typedUser && (typedUser.trustLevel ?? 0) >= 2 && (
-            <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild>
-                <button style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, padding: "3px 7px", cursor: "pointer", color: "#9aafc8", display: "flex", alignItems: "center" }}>
-                  <Plus size={12} />
-                </button>
-              </DialogTrigger>
-              <DialogContent className="rounded-none border-border/50 bg-card max-w-md">
-                <DialogHeader><DialogTitle className="font-serif tracking-widest uppercase">Form a Crew</DialogTitle></DialogHeader>
-                <form onSubmit={createCrew} className="space-y-3">
-                  <Input placeholder="Crew name" value={name} onChange={e => setName(e.target.value)} className="font-mono rounded-none" required />
-                  <Textarea placeholder="Mission briefing" value={description} onChange={e => setDescription(e.target.value)} className="font-mono rounded-none" rows={2} />
-                  <Input placeholder="Members (usernames, comma separated)" value={memberInput} onChange={e => setMemberInput(e.target.value)} className="font-mono rounded-none" />
-                  <DialogFooter><Button type="submit" className="font-serif tracking-widest uppercase rounded-none">Form Crew</Button></DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-          )}
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={() => navigate("/chat")}
+              style={{
+                background: "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 4,
+                padding: "4px 8px",
+                cursor: "pointer",
+                color: "#9aafc8",
+                fontSize: 11,
+                textTransform: "uppercase",
+                fontFamily: "system-ui, sans-serif",
+              }}
+            >
+              Lobby
+            </button>
+            {typedUser && (
+              <Dialog open={open} onOpenChange={setOpen}>
+                <DialogTrigger asChild>
+                  <button style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, padding: "3px 7px", cursor: "pointer", color: "#9aafc8", display: "flex", alignItems: "center" }}>
+                    <Plus size={12} />
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="rounded-none border-border/50 bg-card max-w-md">
+                  <DialogHeader><DialogTitle className="font-serif tracking-widest uppercase">Form a Crew</DialogTitle></DialogHeader>
+                  <form onSubmit={createCrew} className="space-y-3">
+                    <Input placeholder="Crew name" value={name} onChange={e => setName(e.target.value)} className="font-mono rounded-none" required />
+                    <Textarea placeholder="Mission briefing" value={description} onChange={e => setDescription(e.target.value)} className="font-mono rounded-none" rows={2} />
+                    <Input placeholder="Members (usernames, comma separated)" value={memberInput} onChange={e => setMemberInput(e.target.value)} className="font-mono rounded-none" />
+                    <DialogFooter><Button type="submit" className="font-serif tracking-widest uppercase rounded-none">Form Crew</Button></DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
         </div>
 
         {/* Crew list */}
@@ -237,6 +258,7 @@ function CrewDetail({ crew, currentUserId, onUpdate }: { crew: Crew; currentUser
   const [editMeetupNote, setEditMeetupNote] = useState(crew.meetupNote ?? "");
   const [savingEdit, setSavingEdit] = useState(false);
   const [addOpen, setAddOpen] = useState(false); const [newMember, setNewMember] = useState(""); const [addingMember, setAddingMember] = useState(false);
+  const [actionPending, setActionPending] = useState({ checkin: false, emergency: false });
 
   const [locationQuery, setLocationQuery] = useState(""); const [locationResults, setLocationResults] = useState<LocationResult[]>([]);
   const [showLocations, setShowLocations] = useState(false);
@@ -303,22 +325,100 @@ function CrewDetail({ crew, currentUserId, onUpdate }: { crew: Crew; currentUser
   const saveEdit = async (e: React.FormEvent) => {
     e.preventDefault(); setSavingEdit(true);
     try {
-      await customFetch(`/api/crews/${crew.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: editName, description: editDesc, meetupAt: editMeetupAt ? new Date(editMeetupAt).toISOString() : null, meetupNote: editMeetupNote || null }) });
-      setEditOpen(false); onUpdate(); toast({ title: "Crew updated" });
-    } catch { toast({ title: "Error", variant: "destructive" }); } finally { setSavingEdit(false); }
+      const updated = await customFetch<Crew>(`/api/crews/${crew.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editName,
+          description: editDesc,
+          meetupAt: editMeetupAt ? new Date(editMeetupAt).toISOString() : null,
+          meetupNote: editMeetupNote || null,
+        }),
+      });
+      setEditOpen(false);
+      setSelected(updated);
+      onUpdate();
+      toast({ title: "Crew updated" });
+    } catch {
+      toast({ title: "Error", variant: "destructive" });
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   const addMember = async (e: React.FormEvent) => {
     e.preventDefault(); if (!newMember.trim()) return; setAddingMember(true);
     try {
-      await customFetch(`/api/crews/${crew.id}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: newMember.trim() }) });
-      setNewMember(""); setAddOpen(false); onUpdate(); toast({ title: "Member added" });
-    } catch { toast({ title: "Error", description: "Check the username.", variant: "destructive" }); } finally { setAddingMember(false); }
+      const updated = await customFetch<Crew>(`/api/crews/${crew.id}/members`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: newMember.trim() }),
+      });
+      setNewMember(""); setAddOpen(false);
+      setSelected(updated);
+      onUpdate();
+      toast({ title: "Member added" });
+    } catch {
+      toast({ title: "Error", description: "Check the username.", variant: "destructive" });
+    } finally {
+      setAddingMember(false);
+    }
+  };
+
+  async function getGeolocation(): Promise<{ latitude?: number; longitude?: number }> {
+    if (!navigator?.geolocation) return {};
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
+        },
+        () => resolve({}),
+        { timeout: 8000 },
+      );
+    });
+  }
+
+  const handleCheckIn = async () => {
+    setActionPending((prev) => ({ ...prev, checkin: true }));
+    try {
+      const coords = await getGeolocation();
+      await customFetch(`/api/crews/${crew.id}/checkin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(coords),
+      });
+      onUpdate();
+      toast({ title: "Checked in", description: "Your crew check-in was registered." });
+    } catch {
+      toast({ title: "Check-in failed", variant: "destructive" });
+    } finally {
+      setActionPending((prev) => ({ ...prev, checkin: false }));
+    }
+  };
+
+  const handleEmergency = async () => {
+    setActionPending((prev) => ({ ...prev, emergency: true }));
+    try {
+      await customFetch(`/api/crews/${crew.id}/emergency`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      onUpdate();
+      toast({ title: "Emergency sent", description: "Your crew has been alerted." });
+    } catch {
+      toast({ title: "Emergency failed", variant: "destructive" });
+    } finally {
+      setActionPending((prev) => ({ ...prev, emergency: false }));
+    }
   };
 
   return (
     <>
-      {/* Channel header */}
+      {/* Header */}
       <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(0,0,0,0.15)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Users size={14} style={{ color: "#6b7fa0" }} />
@@ -357,55 +457,131 @@ function CrewDetail({ crew, currentUserId, onUpdate }: { crew: Crew; currentUser
         </div>
       )}
 
-      {/* Messages */}
-      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 2 }}>
-        {messages.length === 0 ? (
-          <div style={{ textAlign: "center", color: "#4a5a72", fontFamily: "system-ui, sans-serif", fontSize: 13, paddingTop: 40 }}>
-            Crew channel is silent. Start the planning.
+      {/* Main content grid */}
+      <div style={{ flex: 1, display: "flex", minHeight: 0, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+        {/* Chat panel */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+          {/* Messages */}
+          <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 2 }}>
+            {messages.length === 0 ? (
+              <div style={{ textAlign: "center", color: "#4a5a72", fontFamily: "system-ui, sans-serif", fontSize: 13, paddingTop: 40 }}>
+                Crew channel is silent. Start the planning.
+              </div>
+            ) : messages.map((m, i) => {
+              const mine = currentUserId === m.authorId;
+              const prevMsg = messages[i - 1];
+              const grouped = prevMsg?.authorId === m.authorId && (new Date(m.createdAt).getTime() - new Date(prevMsg.createdAt).getTime()) < 5 * 60 * 1000;
+              return (
+                <CrewMessageRow key={m.id} msg={m} mine={mine} grouped={grouped} onLike={() => toggleLike(m.id)} />
+              );
+            })}
           </div>
-        ) : messages.map((m, i) => {
-          const mine = currentUserId === m.authorId;
-          const prevMsg = messages[i - 1];
-          const grouped = prevMsg?.authorId === m.authorId && (new Date(m.createdAt).getTime() - new Date(prevMsg.createdAt).getTime()) < 5 * 60 * 1000;
-          return (
-            <CrewMessageRow key={m.id} msg={m} mine={mine} grouped={grouped} onLike={() => toggleLike(m.id)} />
-          );
-        })}
-      </div>
 
-      {/* Input */}
-      <div style={{ padding: "8px 16px 10px", borderTop: "1px solid rgba(255,255,255,0.06)", position: "relative" }}>
-        {showLocations && (
-          <div style={{ position: "absolute", bottom: "100%", left: 16, right: 16, marginBottom: 4, background: "#1a2233", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, maxHeight: 180, overflowY: "auto", zIndex: 50, boxShadow: "0 -4px 12px rgba(0,0,0,0.3)" }}>
-            {locationResults.length === 0 ? (
-              <div style={{ padding: "8px 12px", color: "#6b7fa0", fontSize: 12, fontFamily: "system-ui, sans-serif" }}>{locationQuery ? "No locations found…" : "Type to search…"}</div>
-            ) : locationResults.map(loc => (
-              <button key={loc.id} type="button" onClick={() => pickLocation(loc)}
-                style={{ width: "100%", background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: "7px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: 8 }}>
-                <MapPin size={12} style={{ color: "#e8760a", flexShrink: 0 }} />
-                <div>
-                  <div style={{ color: "#d8e8f8", fontSize: 12, fontFamily: "system-ui, sans-serif" }}>{loc.name}</div>
-                  {(loc.city || loc.stateName) && <div style={{ color: "#6b7fa0", fontSize: 10 }}>{[loc.city, loc.stateName].filter(Boolean).join(", ")}</div>}
-                </div>
+          {/* Input */}
+          <div style={{ padding: "8px 16px 10px", borderTop: "1px solid rgba(255,255,255,0.06)", position: "relative", background: "#212d3f", flexShrink: 0 }}>
+            {showLocations && (
+              <div style={{ position: "absolute", bottom: "100%", left: 16, right: 16, marginBottom: 4, background: "#1a2233", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, maxHeight: 180, overflowY: "auto", zIndex: 50, boxShadow: "0 -4px 12px rgba(0,0,0,0.3)" }}>
+                {locationResults.length === 0 ? (
+                  <div style={{ padding: "8px 12px", color: "#6b7fa0", fontSize: 12, fontFamily: "system-ui, sans-serif" }}>{locationQuery ? "No locations found…" : "Type to search…"}</div>
+                ) : locationResults.map(loc => (
+                  <button key={loc.id} type="button" onClick={() => pickLocation(loc)}
+                    style={{ width: "100%", background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: "7px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: 8 }}>
+                    <MapPin size={12} style={{ color: "#e8760a", flexShrink: 0 }} />
+                    <div>
+                      <div style={{ color: "#d8e8f8", fontSize: 12, fontFamily: "system-ui, sans-serif" }}>{loc.name}</div>
+                      {(loc.city || loc.stateName) && <div style={{ color: "#6b7fa0", fontSize: 10 }}>{[loc.city, loc.stateName].filter(Boolean).join(", ")}</div>}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+            <form onSubmit={send} style={{ display: "flex", gap: 8, alignItems: "center", width: "100%", minHeight: 40 }}>
+              <div style={{ flex: 1, background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, display: "flex", alignItems: "center", padding: "0 10px", minWidth: 0 }}>
+                <input
+                  value={body}
+                  onChange={e => handleBodyChange(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Escape") setShowLocations(false); if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(e); } }}
+                  placeholder={`Message ${crew.name}… (# to tag location)`}
+                  style={{ flex: 1, background: "none", border: "none", outline: "none", color: "#d8e8f8", fontSize: 13, fontFamily: "system-ui, sans-serif", padding: "9px 0", width: "100%" }}
+                />
+              </div>
+              <button type="submit" disabled={sending || !body.trim()}
+                style={{ background: body.trim() ? "#e8760a" : "#2a3a50", border: "none", borderRadius: 4, padding: "8px 14px", cursor: body.trim() ? "pointer" : "default", color: body.trim() ? "white" : "#4a5a72", display: "flex", alignItems: "center", flexShrink: 0, whiteSpace: "nowrap" }}>
+                <Send size={14} />
               </button>
+            </form>
+          </div>
+        </div>
+
+        {/* Tactical map panel */}
+        <div style={{ width: 280, flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.06)", background: "linear-gradient(180deg, rgba(26,34,51,0.5) 0%, rgba(20,28,43,0.5) 100%)", display: "flex", flexDirection: "column", padding: "12px", overflowY: "auto" }}>
+          <div style={{ color: "#e8760a", fontSize: 11, fontWeight: 700, fontFamily: "system-ui, sans-serif", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>Tactical Map</div>
+
+          {/* Radar visualization */}
+          <div style={{ width: "100%", aspectRatio: "1/1", background: "radial-gradient(circle, rgba(232,118,10,0.1) 0%, rgba(232,118,10,0.05) 70%, transparent 100%)", border: "1px solid rgba(232,118,10,0.2)", borderRadius: "50%", position: "relative", marginBottom: 12 }}>
+            {/* Grid */}
+            <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+              <circle cx="50%" cy="50%" r="50%" fill="none" stroke="rgba(232,118,10,0.1)" strokeWidth={0.5} />
+              <circle cx="50%" cy="50%" r="33%" fill="none" stroke="rgba(232,118,10,0.1)" strokeWidth={0.5} />
+              <circle cx="50%" cy="50%" r="16%" fill="none" stroke="rgba(232,118,10,0.1)" strokeWidth={0.5} />
+              <line x1="50%" y1="0%" x2="50%" y2="100%" stroke="rgba(232,118,10,0.1)" strokeWidth={0.5} />
+              <line x1="0%" y1="50%" x2="100%" y2="50%" stroke="rgba(232,118,10,0.1)" strokeWidth={0.5} />
+            </svg>
+            
+            {/* Crew members */}
+            {crew.members.map((m, i) => {
+              const angle = (i / crew.members.length) * Math.PI * 2;
+              const radius = 35;
+              const x = 50 + radius * Math.cos(angle);
+              const y = 50 + radius * Math.sin(angle);
+              return (
+                <div key={m.userId} style={{ position: "absolute", left: `${x}%`, top: `${y}%`, transform: "translate(-50%, -50%)", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <div style={{ width: 16, height: 16, borderRadius: "50%", background: m.lastCheckinAt ? "#2baa4b" : "#4a5a72", border: "2px solid #1a2233", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "white", fontWeight: 700 }}>
+                    {m.username[0]}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Meetup marker */}
+            {crew.meetupAt && (
+              <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}>
+                <div style={{ width: 12, height: 12, background: "#e8760a", borderRadius: "50%", border: "2px solid #1a2233", boxShadow: "0 0 8px rgba(232,118,10,0.5)" }} />
+              </div>
+            )}
+          </div>
+
+          {/* Member status list */}
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#6b7fa0", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 6 }}>Members</div>
+          <div style={{ space: "y-1" }}>
+            {crew.members.map(m => (
+              <div key={m.userId} style={{ padding: "4px 6px", background: "rgba(255,255,255,0.03)", borderRadius: 3, display: "flex", alignItems: "center", gap: 3, marginBottom: 3 }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: m.lastCheckinAt ? "#2baa4b" : "#4a5a72", flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: 11, color: "#9aafc8", fontFamily: "system-ui, sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>
+                    {m.username}
+                  </span>
+                  <span style={{ fontSize: 9, color: "#6b7fa0", fontFamily: "system-ui, sans-serif", display: "block", marginTop: 1 }}>
+                    {m.lastCheckinAt ? `Checked in ${formatDistanceToNow(new Date(m.lastCheckinAt), { addSuffix: true })}` : "Awaiting check-in"}
+                  </span>
+                </div>
+                {m.lastCheckinAt && <span style={{ fontSize: 9, color: "#6b7fa0" }}>✓</span>}
+              </div>
             ))}
           </div>
-        )}
-        <form onSubmit={send} style={{ display: "flex", gap: 8 }}>
-          <div style={{ flex: 1, background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, display: "flex", alignItems: "center", padding: "0 10px" }}>
-            <input
-              value={body}
-              onChange={e => handleBodyChange(e.target.value)}
-              onKeyDown={e => { if (e.key === "Escape") setShowLocations(false); if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(e); } }}
-              placeholder={`Message ${crew.name}… (# to tag a location)`}
-              style={{ flex: 1, background: "none", border: "none", outline: "none", color: "#d8e8f8", fontSize: 13, fontFamily: "system-ui, sans-serif", padding: "9px 0" }}
-            />
+
+          {/* Quick actions */}
+          <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+            <button type="button" onClick={handleCheckIn} disabled={actionPending.checkin}
+              style={{ width: "100%", background: "rgba(232,118,10,0.1)", border: "1px solid rgba(232,118,10,0.3)", borderRadius: 3, padding: "6px 8px", cursor: actionPending.checkin ? "not-allowed" : "pointer", color: "#e8760a", fontSize: 11, fontWeight: 600, fontFamily: "system-ui, sans-serif", marginBottom: 4 }}>
+              {actionPending.checkin ? "CHECKING IN..." : "📍 Check In"}
+            </button>
+            <button type="button" onClick={handleEmergency} disabled={actionPending.emergency}
+              style={{ width: "100%", background: "rgba(42,58,80,0.3)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, padding: "6px 8px", cursor: actionPending.emergency ? "not-allowed" : "pointer", color: "#9aafc8", fontSize: 11, fontWeight: 600, fontFamily: "system-ui, sans-serif" }}>
+              {actionPending.emergency ? "SENDING ALERT..." : "🚨 Emergency"}
+            </button>
           </div>
-          <button type="submit" disabled={sending || !body.trim()}
-            style={{ background: body.trim() ? "#e8760a" : "#2a3a50", border: "none", borderRadius: 4, padding: "8px 14px", cursor: body.trim() ? "pointer" : "default", color: body.trim() ? "white" : "#4a5a72", display: "flex", alignItems: "center" }}>
-            <Send size={14} />
-          </button>
-        </form>
+        </div>
       </div>
 
       {/* Edit dialog */}

@@ -11,6 +11,9 @@ export const statesTable = pgTable("states", {
   slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
   abbreviation: text("abbreviation").notNull(),
+  parentId: integer("parent_id").references(() => statesTable.id, {
+    onDelete: "cascade",
+  }).default(null),
   centerLat: doublePrecision("center_lat").notNull(),
   centerLng: doublePrecision("center_lng").notNull(),
   zoom: integer("zoom").notNull().default(7),

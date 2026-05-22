@@ -1,0 +1,5 @@
+ id | username | role  | is_banned | has_password |                hash                
+----+----------+-------+-----------+--------------+------------------------------------
+  1 | TWhy     | admin | f         | t            | b0.qlNphABcw6bx287zShvQ6Oo.rUc5ZmO
+(1 row)
+

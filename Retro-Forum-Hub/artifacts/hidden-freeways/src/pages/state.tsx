@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, Link } from "wouter";
-import { useGetStateBySlug, useCreateLocation, getGetStateBySlugQueryKey } from "@workspace/api-client-react";
+import { useGetStateBySlug, useCreateLocation, getGetStateBySlugQueryKey, customFetch } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { UrbexMap } from "@/components/map";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -10,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, PlusSquare, AlertTriangle, Shield, CheckCircle } from "lucide-react";
+import { MapPin, PlusSquare, AlertTriangle, Shield, CheckCircle, Lock } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDistanceToNow } from "date-fns";
 
@@ -24,16 +25,42 @@ export default function State() {
   });
 
   const createLocation = useCreateLocation();
+  const [mapStyle, setMapStyle] = useState<"dark" | "satellite">("dark");
+  useEffect(() => {
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem("urbexMapStyle") : null;
+    if (stored === "satellite" || stored === "dark") {
+      setMapStyle(stored);
+    }
+  }, []);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("urbexMapStyle", mapStyle);
+    }
+  }, [mapStyle]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [activeSpotType, setActiveSpotType] = useState<"all" | "rooftop" | "tunnel" | "industrial" | "hospital" | "drain" | "military" | "other">("all");
   const [formData, setFormData] = useState({
     name: "",
     description: "",
     city: "",
     latitude: 0,
     longitude: 0,
+    spotType: "other" as const,
     status: "active" as const,
     risk: "medium" as const,
   });
+  const [activeLayerTags, setActiveLayerTags] = useState<string[]>([]);
+  const { data: mapLayers } = useQuery<Array<{ id: number; title: string; description: string | null; layerTag: string; latitude: number; longitude: number; color: string | null }>>({
+    queryKey: ["state-map-layers", slug],
+    queryFn: () => customFetch(`/api/map-layers?stateSlug=${slug}`),
+    enabled: !!slug,
+  });
+
+  useEffect(() => {
+    if (mapLayers && activeLayerTags.length === 0) {
+      setActiveLayerTags(Array.from(new Set(mapLayers.map((layer) => layer.layerTag))));
+    }
+  }, [mapLayers, activeLayerTags.length]);
 
   if (isLoading) {
     return (
@@ -55,17 +82,88 @@ export default function State() {
 
   const { state, locations, pinnedThreads } = data;
 
-  const markers = locations.map(loc => ({
-    id: loc.id,
-    lat: loc.latitude,
-    lng: loc.longitude,
-    title: loc.name,
-    subtitle: loc.city || "Unknown",
-    link: `/location/${loc.id}`,
-    color: loc.status === 'demolished' ? 'hsl(var(--destructive))' : 
-           loc.status === 'watched' ? 'hsl(var(--accent))' : 
-           'hsl(var(--primary))'
-  }));
+  const spotTypeOptions = [
+    { value: "all", label: "ALL SPOTS" },
+    { value: "rooftop", label: "ROOFTOP" },
+    { value: "tunnel", label: "TUNNEL" },
+    { value: "industrial", label: "INDUSTRIAL" },
+    { value: "hospital", label: "HOSPITAL" },
+    { value: "drain", label: "DRAIN" },
+    { value: "military", label: "MILITARY" },
+    { value: "other", label: "OTHER" },
+  ] as const;
+
+  const getSpotTypeColor = (type: string) => {
+    switch (type) {
+      case "rooftop":
+        return "hsl(49, 100%, 58%)";
+      case "tunnel":
+        return "hsl(190, 100%, 58%)";
+      case "industrial":
+        return "hsl(345, 92%, 57%)";
+      case "hospital":
+        return "hsl(184, 99%, 35%)";
+      case "drain":
+        return "hsl(260, 80%, 60%)";
+      case "military":
+        return "hsl(113, 44%, 32%)";
+      default:
+        return "hsl(var(--primary))";
+    }
+  };
+
+  const getSpotTypeLabel = (type: string) => {
+    return type === "rooftop"
+      ? "Rooftop"
+      : type === "tunnel"
+      ? "Tunnel"
+      : type === "industrial"
+      ? "Industrial"
+      : type === "hospital"
+      ? "Hospital"
+      : type === "drain"
+      ? "Drain"
+      : type === "military"
+      ? "Military"
+      : "Other";
+  };
+
+  const totalLocations = locations.length;
+
+  const allLayerTags = Array.from(new Set(mapLayers?.map((layer) => layer.layerTag) ?? []));
+  const filteredLocations =
+    activeSpotType === "all"
+      ? locations
+      : locations.filter((loc) => loc.spotType === activeSpotType);
+
+  const layerMarkers = (mapLayers ?? [])
+    .filter((layer) => activeLayerTags.includes(layer.layerTag))
+    .map((layer) => ({
+      id: `layer-${layer.id}`,
+      lat: layer.latitude,
+      lng: layer.longitude,
+      title: layer.title,
+      subtitle: layer.description || layer.layerTag,
+      color: layer.color || "hsl(20, 80%, 60%)",
+    }));
+
+  const markers = [
+    ...filteredLocations.map((loc) => ({
+      id: loc.id,
+      lat: loc.latitude,
+      lng: loc.longitude,
+      title: loc.name,
+      subtitle: loc.city || "Unknown",
+      link: `/location/${loc.id}`,
+      color:
+        loc.status === "demolished"
+          ? "hsl(var(--destructive))"
+          : loc.status === "watched"
+          ? "hsl(var(--accent))"
+          : getSpotTypeColor(loc.spotType),
+    })),
+    ...layerMarkers,
+  ];
 
   const handleMapClick = (lat: number, lng: number) => {
     setFormData(prev => ({ ...prev, latitude: lat, longitude: lng }));
@@ -83,7 +181,16 @@ export default function State() {
       onSuccess: () => {
         setIsDialogOpen(false);
         queryClient.invalidateQueries({ queryKey: getGetStateBySlugQueryKey(slug) });
-        setFormData({ name: "", description: "", city: "", latitude: state.centerLat, longitude: state.centerLng, status: "active", risk: "medium" });
+        setFormData({
+          name: "",
+          description: "",
+          city: "",
+          latitude: state.centerLat,
+          longitude: state.centerLng,
+          spotType: "other",
+          status: "active",
+          risk: "medium",
+        });
       }
     });
   };
@@ -111,11 +218,28 @@ export default function State() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="relative">
+        <div className="absolute top-4 right-4 z-[400] flex gap-2">
+          {(["dark", "satellite"] as const).map((style) => (
+            <button
+              key={style}
+              type="button"
+              onClick={() => setMapStyle(style)}
+              className={`rounded-none border px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-mono transition-colors ${
+                mapStyle === style
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border/60 bg-background/70 text-muted-foreground hover:border-primary hover:text-primary"
+              }`}
+            >
+              {style === "dark" ? "DARK" : "SAT"}
+            </button>
+          ))}
+        </div>
         <UrbexMap 
           center={[state.centerLat, state.centerLng]} 
           zoom={state.zoom} 
           markers={markers}
           className="h-[500px] w-full border border-border/50"
+          mapStyle={mapStyle}
         />
         <div className="absolute top-4 left-4 z-[400] pointer-events-none">
           <div className="bg-background/80 backdrop-blur-sm border border-border/50 p-4 shadow-lg">
@@ -148,8 +272,13 @@ export default function State() {
       )}
 
       <section className="space-y-4">
-        <div className="flex items-center justify-between border-b border-border/50 pb-2">
-          <h2 className="font-serif text-lg text-primary tracking-widest uppercase">Grid Coordinates</h2>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b border-border/50 pb-2">
+          <div>
+            <h2 className="font-serif text-lg text-primary tracking-widest uppercase">Grid Coordinates</h2>
+            <div className="font-mono text-xs text-muted-foreground uppercase tracking-wider mt-1">
+              Logged spots: {totalLocations} • Filter by spot type and explore the sector's tactical dossier grid.
+            </div>
+          </div>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" size="sm" className="border-primary/30 text-primary hover:bg-primary/10 rounded-none font-mono text-xs uppercase tracking-wider">
@@ -177,6 +306,21 @@ export default function State() {
                   <div className="space-y-2">
                     <Label className="font-mono text-xs uppercase text-muted-foreground">Longitude</Label>
                     <Input required type="number" step="any" value={formData.longitude || ''} onChange={e => setFormData({...formData, longitude: parseFloat(e.target.value)})} className="bg-background/50 rounded-none border-border font-mono" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="font-mono text-xs uppercase text-muted-foreground">Spot Type</Label>
+                    <Select value={formData.spotType} onValueChange={(v: any) => setFormData({...formData, spotType: v})}>
+                      <SelectTrigger className="bg-background/50 rounded-none border-border font-mono"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-card border-border rounded-none">
+                        <SelectItem value="rooftop">Rooftop</SelectItem>
+                        <SelectItem value="tunnel">Tunnel</SelectItem>
+                        <SelectItem value="industrial">Industrial</SelectItem>
+                        <SelectItem value="hospital">Hospital</SelectItem>
+                        <SelectItem value="drain">Drain</SelectItem>
+                        <SelectItem value="military">Military</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label className="font-mono text-xs uppercase text-muted-foreground">Status</Label>
@@ -215,8 +359,53 @@ export default function State() {
           </Dialog>
         </div>
 
+        <div className="flex flex-wrap gap-2 mb-4">
+          {spotTypeOptions.map((type) => (
+            <button
+              key={type.value}
+              type="button"
+              className={`rounded-none border px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-mono transition-colors ${
+                activeSpotType === type.value
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border/50 text-muted-foreground hover:border-primary hover:text-primary"
+              }`}
+              onClick={() => setActiveSpotType(type.value)}
+            >
+              {type.label}
+            </button>
+          ))}
+        </div>
+
+        {allLayerTags.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {allLayerTags.map((tag) => {
+              const isActive = activeLayerTags.includes(tag);
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() =>
+                    setActiveLayerTags((prev) =>
+                      prev.includes(tag)
+                        ? prev.filter((item) => item !== tag)
+                        : [...prev, tag]
+                    )
+                  }
+                  className={`rounded-none border px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-mono transition-colors ${
+                    isActive
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border/50 text-muted-foreground hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  {tag}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {locations.map(loc => (
+          {filteredLocations.map(loc => (
             <Link key={loc.id} href={`/location/${loc.id}`}>
               <div className="group border border-border/50 bg-card/20 hover:bg-card/60 hover:border-primary/40 transition-all cursor-pointer p-4 h-full flex flex-col relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
@@ -230,6 +419,9 @@ export default function State() {
                     </Badge>
                     <Badge variant="outline" className={`rounded-none text-[9px] uppercase font-mono px-1 py-0 h-4 ${getRiskColor(loc.risk)}`}>
                       RISK: {loc.risk}
+                    </Badge>
+                    <Badge variant="outline" className={`rounded-none text-[9px] uppercase font-mono px-1 py-0 h-4 border-border`}>
+                      {getSpotTypeLabel(loc.spotType)}
                     </Badge>
                   </div>
                   <h3 className="font-serif text-lg text-foreground group-hover:text-primary transition-colors leading-tight mb-1">{loc.name}</h3>
@@ -245,9 +437,9 @@ export default function State() {
               </div>
             </Link>
           ))}
-          {locations.length === 0 && (
+          {filteredLocations.length === 0 && (
             <div className="col-span-full text-muted-foreground font-mono text-sm italic py-8 text-center border border-border/20 bg-card/10">
-              No coordinates logged for this sector.
+              No coordinates match the selected spot type.
             </div>
           )}
         </div>

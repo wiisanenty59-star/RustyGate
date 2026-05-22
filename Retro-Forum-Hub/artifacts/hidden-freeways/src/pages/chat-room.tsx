@@ -67,9 +67,7 @@ export default function ChatRoom() {
   const [locationResults, setLocationResults] = useState<LocationResult[]>([]);
   const [showLocations, setShowLocations] = useState(false);
 
-  const typedUser = user as
-    | (typeof user & { role?: string; trustLevel?: number })
-    | undefined;
+  const typedUser = user as { role?: string; trustLevel?: number } | undefined;
   const isPrivileged =
     typedUser?.role === "admin" || typedUser?.role === "moderator";
 

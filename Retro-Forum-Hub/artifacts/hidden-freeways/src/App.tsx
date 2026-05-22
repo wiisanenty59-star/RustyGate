@@ -10,6 +10,7 @@ import { Layout } from "@/components/layout";
 import Home from "@/pages/home";
 import Login from "@/pages/login";
 import Invite from "@/pages/invite";
+import InviteCodes from "@/pages/invite-codes";
 import Category from "@/pages/category";
 import State from "@/pages/state";
 import LocationDetail from "@/pages/location";
@@ -94,6 +95,12 @@ function Router() {
       <Route path="/admin">
         <Layout>
           <ProtectedRoute component={Admin} adminOnly={true} />
+        </Layout>
+      </Route>
+
+      <Route path="/invite-codes">
+        <Layout>
+          <ProtectedRoute component={InviteCodes} />
         </Layout>
       </Route>
 

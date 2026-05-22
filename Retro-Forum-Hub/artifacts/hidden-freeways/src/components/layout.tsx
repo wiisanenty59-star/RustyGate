@@ -21,6 +21,9 @@ import {
   Circle,
   TrendingUp,
   Globe,
+  Bell,
+  Check,
+  X,
 } from "lucide-react";
 
 function useOnlineCount() {
@@ -49,8 +52,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { data: onlineData } = useOnlineCount();
   const [catMenuOpen, setCatMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
   const catRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
+  const { data: notificationsData } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: () => customFetch<{ unreadCount: number; notifications: Array<{ id: number; title: string; body: string; sourceType: string; sourceId: number | null; isRead: boolean; createdAt: string }> }>("/api/notifications"),
+    enabled: !!user,
+    staleTime: 30_000,
+  });
+  const unreadCount = notificationsData?.unreadCount ?? 0;
 
   const handleLogout = () => {
     logout.mutate(undefined, {
@@ -69,6 +81,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
         setCatMenuOpen(false);
       if (userRef.current && !userRef.current.contains(e.target as Node))
         setUserMenuOpen(false);
+      if (notifRef.current && !notifRef.current.contains(e.target as Node))
+        setNotifOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -77,6 +91,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const topCategories = (categories ?? []).filter(
     (c) => !(c as { parentId?: number | null }).parentId,
   );
+
+  const handleNotificationToggle = async () => {
+    const nextOpen = !notifOpen;
+    setNotifOpen(nextOpen);
+    if (nextOpen && unreadCount > 0) {
+      await customFetch("/api/notifications/read-all", { method: "PATCH" });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    }
+  };
 
   return (
     <div
@@ -173,27 +196,118 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <div
               style={{ textAlign: "right", fontFamily: FONT, lineHeight: 1.6 }}
             >
-              <div style={{ fontSize: 12, color: "#6b7f98" }}>
-                Operative:{" "}
-                <span style={{ color: "#f0a060", fontWeight: 600 }}>
-                  {user.username}
-                </span>
-                {user.role === "admin" && (
-                  <span
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, alignItems: "center" }}>
+                <div style={{ fontSize: 12, color: "#6b7f98" }}>
+                  Operative:{" "}
+                  <span style={{ color: "#f0a060", fontWeight: 600 }}>
+                    {user.username}
+                  </span>
+                  {user.role === "admin" && (
+                    <span
+                      style={{
+                        marginLeft: 8,
+                        background: RUST,
+                        color: "white",
+                        padding: "1px 7px",
+                        fontSize: 10,
+                        borderRadius: 3,
+                        fontWeight: 700,
+                        letterSpacing: "0.04em",
+                      }}
+                    >
+                      ADMIN
+                    </span>
+                  )}
+                </div>
+                <div ref={notifRef} style={{ position: "relative" }}>
+                  <button
+                    type="button"
+                    onClick={handleNotificationToggle}
                     style={{
-                      marginLeft: 8,
-                      background: RUST,
-                      color: "white",
-                      padding: "1px 7px",
-                      fontSize: 10,
-                      borderRadius: 3,
-                      fontWeight: 700,
-                      letterSpacing: "0.04em",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.04)",
+                      color: "#f0e8dc",
+                      padding: "8px",
+                      borderRadius: 8,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
                     }}
                   >
-                    ADMIN
-                  </span>
-                )}
+                    <Bell size={16} />
+                    {unreadCount > 0 && (
+                      <span
+                        style={{
+                          marginLeft: 6,
+                          minWidth: 18,
+                          height: 18,
+                          borderRadius: 999,
+                          background: "#e87820",
+                          color: "white",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 10,
+                          fontWeight: 700,
+                        }}
+                      >
+                        {unreadCount}
+                      </span>
+                    )}
+                  </button>
+                  {notifOpen && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        right: 0,
+                        top: 42,
+                        width: 320,
+                        maxHeight: 340,
+                        overflowY: "auto",
+                        background: "rgba(13,17,23,0.95)",
+                        border: "1px solid rgba(200,90,26,0.25)",
+                        boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
+                        zIndex: 50,
+                        borderRadius: 10,
+                        padding: 12,
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                        <div style={{ fontSize: 12, fontFamily: FONT, letterSpacing: "0.08em", color: "#c9d1d9", textTransform: "uppercase" }}>
+                          Notifications
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setNotifOpen(false)}
+                          style={{ border: "none", background: "transparent", color: "#7a9ab8", cursor: "pointer" }}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                      {(notificationsData?.notifications.length ?? 0) === 0 ? (
+                        <div style={{ fontSize: 12, color: "#7a9ab8", lineHeight: 1.6 }}>
+                          No new alerts. Keep the grid dark.
+                        </div>
+                      ) : (
+                        <div style={{ display: "grid", gap: 10 }}>
+                          {notificationsData.notifications.map((note) => (
+                            <div key={note.id} style={{ border: "1px solid rgba(255,255,255,0.08)", padding: 10, borderRadius: 8, background: note.isRead ? "rgba(255,255,255,0.03)" : "rgba(232,120,32,0.08)" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: "#f0e8dc" }}>{note.title}</div>
+                                {note.isRead ? <Check size={14} /> : null}
+                              </div>
+                              <div style={{ fontSize: 11, color: "#9ba4b5", marginTop: 4, lineHeight: 1.4 }}>{note.body}</div>
+                              <div style={{ fontSize: 10, color: "#6b7f98", marginTop: 6, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                                {new Date(note.createdAt).toLocaleString()}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               {onlineData && (
                 <div
@@ -478,6 +592,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       >
                         <Shield size={13} />
                         Admin Panel
+                      </Link>
+                    )}
+                    {(user.role === "admin" || (user.trustLevel ?? 0) >= 2) && (
+                      <Link
+                        href="/invite-codes"
+                        onClick={() => setUserMenuOpen(false)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "10px 16px",
+                          fontSize: 12,
+                          color: "#f0a060",
+                          borderBottom: "1px solid rgba(255,255,255,0.05)",
+                          textDecoration: "none",
+                          fontFamily: FONT,
+                          fontWeight: 600,
+                        }}
+                      >
+                        <PlusSquare size={13} />
+                        Invite Codes
                       </Link>
                     )}
                     <button

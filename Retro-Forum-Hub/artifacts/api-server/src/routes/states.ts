@@ -68,6 +68,7 @@ router.get("/states/:slug", async (req, res): Promise<void> => {
       city: locationsTable.city,
       latitude: locationsTable.latitude,
       longitude: locationsTable.longitude,
+      spotType: locationsTable.spotType,
       status: locationsTable.status,
       risk: locationsTable.risk,
       createdById: locationsTable.createdById,

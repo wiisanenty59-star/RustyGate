@@ -90,6 +90,19 @@ export const LocationRisk = {
   extreme: "extreme",
 } as const;
 
+export type LocationSpotType =
+  (typeof LocationSpotType)[keyof typeof LocationSpotType];
+
+export const LocationSpotType = {
+  rooftop: "rooftop",
+  tunnel: "tunnel",
+  industrial: "industrial",
+  hospital: "hospital",
+  drain: "drain",
+  military: "military",
+  other: "other",
+} as const;
+
 export interface Location {
   id: number;
   stateId: number;
@@ -101,6 +114,7 @@ export interface Location {
   city: string | null;
   latitude: number;
   longitude: number;
+  spotType: LocationSpotType;
   status: LocationStatus;
   risk: LocationRisk;
   createdById: number;
@@ -200,9 +214,23 @@ export interface CreateLocationBody {
   city?: string | null;
   latitude: number;
   longitude: number;
+  spotType: CreateLocationBodySpotType;
   status: CreateLocationBodyStatus;
   risk: CreateLocationBodyRisk;
 }
+
+export type CreateLocationBodySpotType =
+  (typeof CreateLocationBodySpotType)[keyof typeof CreateLocationBodySpotType];
+
+export const CreateLocationBodySpotType = {
+  rooftop: "rooftop",
+  tunnel: "tunnel",
+  industrial: "industrial",
+  hospital: "hospital",
+  drain: "drain",
+  military: "military",
+  other: "other",
+} as const;
 
 export type AdminUpdateLocationBodyStatus =
   (typeof AdminUpdateLocationBodyStatus)[keyof typeof AdminUpdateLocationBodyStatus];
@@ -386,6 +414,7 @@ export interface AdminStateBody {
   name: string;
   slug: string;
   abbreviation: string;
+  parentId?: number | null;
   centerLat: number;
   centerLng: number;
   zoom: number;

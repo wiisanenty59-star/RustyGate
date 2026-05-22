@@ -5,7 +5,6 @@ import { Link } from "wouter";
 import { formatDistanceToNow } from "date-fns";
 import { MessageSquare, MapPin, Users, FileText, Circle, ChevronDown, ChevronRight, Layers, Globe, Clock, TrendingUp } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AnnouncementsBanner } from "@/components/announcements-banner";
 
 const RUST = "#c85a1a";
 const FONT = "system-ui, -apple-system, 'Segoe UI', Arial, sans-serif";
@@ -308,8 +307,6 @@ export default function Home() {
           )}
         </div>
       </div>
-
-      <AnnouncementsBanner />
 
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
 

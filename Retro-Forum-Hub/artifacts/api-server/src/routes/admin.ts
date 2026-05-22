@@ -141,6 +141,22 @@ router.get("/admin/invites", async (_req, res): Promise<void> => {
   res.json(AdminListInvitesResponse.parse(rows));
 });
 
+router.get("/admin/states", async (_req, res): Promise<void> => {
+  const rows = await db
+    .select({
+      id: statesTable.id,
+      slug: statesTable.slug,
+      name: statesTable.name,
+      abbreviation: statesTable.abbreviation,
+      parentId: statesTable.parentId,
+      createdAt: statesTable.createdAt,
+    })
+    .from(statesTable)
+    .orderBy(statesTable.name);
+
+  res.json(rows);
+});
+
 router.post("/admin/invites", async (req, res): Promise<void> => {
   const parsed = AdminCreateInviteBody.safeParse(req.body ?? {});
   if (!parsed.success) {

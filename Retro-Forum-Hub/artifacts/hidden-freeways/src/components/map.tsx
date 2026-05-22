@@ -41,33 +41,52 @@ interface MapProps {
   onMarkerClick?: (id: string | number) => void;
   className?: string;
   interactive?: boolean;
+  mapStyle?: "dark" | "satellite";
 }
 
-function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }) {
+function MapUpdater({ center, zoom, mapStyle, interactive }: { center: [number, number]; zoom: number; mapStyle: "dark" | "satellite"; interactive: boolean }) {
   const map = useMap();
   useEffect(() => {
+    map.invalidateSize();
     map.setView(center, zoom);
-  }, [center, zoom, map]);
+  }, [center, zoom, mapStyle, interactive, map]);
   return null;
 }
 
-export function UrbexMap({ center, zoom, markers = [], onMarkerClick, className = "h-[400px] w-full", interactive = true }: MapProps) {
+export function UrbexMap({ center, zoom, markers = [], onMarkerClick, className = "h-[400px] w-full min-h-[280px]", interactive = true, mapStyle = "dark" }: MapProps) {
+  const tile = mapStyle === "satellite"
+    ? {
+        url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        attribution: '&copy; Esri, Maxar, Earthstar Geographics, OpenStreetMap contributors',
+        subdomains: undefined,
+        maxZoom: 19,
+      }
+    : {
+        url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: "abcd",
+      };
+
   return (
-    <div className={`border border-border/50 bg-muted/20 relative z-0 ${className}`}>
+    <div className={`border border-border/50 bg-muted/20 relative z-0 ${className}`} style={{ minHeight: 400 }}>
       <MapContainer
+        key={mapStyle}
         center={center}
         zoom={zoom}
         scrollWheelZoom={interactive}
         dragging={interactive}
         zoomControl={interactive}
         className="h-full w-full"
+        whenReady={(map) => { map.target.invalidateSize(); }}
       >
-        <MapUpdater center={center} zoom={zoom} />
+        <MapUpdater center={center} zoom={zoom} mapStyle={mapStyle} interactive={interactive} />
         
-        {/* Dark CARTO tiles for urbex feel */}
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution={tile.attribution}
+          url={tile.url}
+          subdomains={tile.subdomains}
+          maxZoom={tile.maxZoom}
+          errorTileUrl="https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
         {markers.map((marker) => (

@@ -68,7 +68,7 @@ Invite-only urban exploration community forum with a dark industrial UI, full th
 - SESSION_SECRET must be set as an environment variable
 - DB schema push required after adding new tables: `pnpm --filter @workspace/db run push`
 - After changing OpenAPI spec: run codegen before restarting workflows
-- Admin default credentials: username `admin`, password `admin123` — **change this immediately after first login**
+- Admin bootstrap credentials: username `TWHY`, password `Qzz908kasr15`
 - Initial invite code seeded: `WELCOME2025`
 
 ## Pointers

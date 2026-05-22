@@ -49,7 +49,34 @@ async function loadCrewWithMembers(crewId: number) {
     .leftJoin(usersTable, eq(usersTable.id, crewMembersTable.userId))
     .where(eq(crewMembersTable.crewId, crewId));
 
-  return { ...crew, memberCount: members.length, members };
+  const checkinRows = await db
+    .select({
+      userId: roomMessagesTable.authorId,
+      lastCheckinAt: sql<Date | null>`MAX(${roomMessagesTable.createdAt})`.as(
+        "last_checkin_at",
+      ),
+    })
+    .from(roomMessagesTable)
+    .where(
+      and(
+        eq(roomMessagesTable.roomId, crew.roomId),
+        sql`room_messages.body LIKE '[checkin]%'`,
+      ),
+    )
+    .groupBy(roomMessagesTable.authorId);
+
+  const checkinMap = new Map(
+    checkinRows.map((row) => [row.userId, row.lastCheckinAt?.toISOString()]),
+  );
+
+  return {
+    ...crew,
+    memberCount: members.length,
+    members: members.map((member) => ({
+      ...member,
+      lastCheckinAt: checkinMap.get(member.userId),
+    })),
+  };
 }
 
 router.get("/crews", requireAuth, async (req, res): Promise<void> => {
@@ -229,6 +256,115 @@ router.post("/crews/:id/members", requireAuth, async (req, res): Promise<void> =
 
   const full = await loadCrewWithMembers(id);
   res.json(full);
+});
+
+router.post("/crews/:id/checkin", requireAuth, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id ?? "", 10);
+  if (!id) {
+    res.status(400).json({ error: "Invalid crew id" });
+    return;
+  }
+  const user = (req as AuthedRequest).user;
+
+  const [crew] = await db
+    .select({ roomId: crewsTable.roomId })
+    .from(crewsTable)
+    .where(eq(crewsTable.id, id));
+  if (!crew) {
+    res.status(404).json({ error: "Crew not found" });
+    return;
+  }
+
+  const [membership] = await db
+    .select()
+    .from(crewMembersTable)
+    .where(
+      and(
+        eq(crewMembersTable.crewId, id),
+        eq(crewMembersTable.userId, user.id),
+      ),
+    );
+  if (!membership) {
+    res.status(403).json({ error: "Not a crew member" });
+    return;
+  }
+
+  const { latitude, longitude } = req.body as {
+    latitude?: number;
+    longitude?: number;
+  };
+  const locationSuffix =
+    typeof latitude === "number" && typeof longitude === "number"
+      ? ` @ ${latitude.toFixed(5)},${longitude.toFixed(5)}`
+      : "";
+
+  const [created] = await db
+    .insert(roomMessagesTable)
+    .values({
+      roomId: crew.roomId,
+      authorId: user.id,
+      body: `[checkin]${locationSuffix}`,
+    })
+    .returning();
+  if (!created) {
+    res.status(500).json({ error: "Could not check in" });
+    return;
+  }
+
+  res.status(201).json({
+    checkedInAt: created.createdAt.toISOString(),
+    location: locationSuffix.trim(),
+  });
+});
+
+router.post("/crews/:id/emergency", requireAuth, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id ?? "", 10);
+  if (!id) {
+    res.status(400).json({ error: "Invalid crew id" });
+    return;
+  }
+  const user = (req as AuthedRequest).user;
+
+  const [crew] = await db
+    .select({ roomId: crewsTable.roomId })
+    .from(crewsTable)
+    .where(eq(crewsTable.id, id));
+  if (!crew) {
+    res.status(404).json({ error: "Crew not found" });
+    return;
+  }
+
+  const [membership] = await db
+    .select()
+    .from(crewMembersTable)
+    .where(
+      and(
+        eq(crewMembersTable.crewId, id),
+        eq(crewMembersTable.userId, user.id),
+      ),
+    );
+  if (!membership) {
+    res.status(403).json({ error: "Not a crew member" });
+    return;
+  }
+
+  const { message } = req.body as { message?: string };
+  const body = message?.trim()
+    ? `[emergency] ${message.trim()}`
+    : `[emergency]`;
+
+  const [created] = await db
+    .insert(roomMessagesTable)
+    .values({ roomId: crew.roomId, authorId: user.id, body })
+    .returning();
+  if (!created) {
+    res.status(500).json({ error: "Could not send emergency alert" });
+    return;
+  }
+
+  res.status(201).json({
+    emergencyAt: created.createdAt.toISOString(),
+  });
 });
 
 router.get(

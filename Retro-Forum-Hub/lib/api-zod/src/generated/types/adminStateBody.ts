@@ -10,6 +10,7 @@ export interface AdminStateBody {
   name: string;
   slug: string;
   abbreviation: string;
+  parentId?: number | null;
   centerLat: number;
   centerLng: number;
   zoom: number;

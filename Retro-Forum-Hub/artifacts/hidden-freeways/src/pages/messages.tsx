@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
+import { useLocation } from "wouter";
 import { useGetCurrentUser } from "@workspace/api-client-react";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ export default function MessagesPage() {
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState("");
   const { data: user } = useGetCurrentUser();
+  const [, setLocation] = useLocation();
 
   async function reload() {
     const c = await customFetch<ChatSummary[]>("/api/messages", {
@@ -51,9 +53,25 @@ export default function MessagesPage() {
     } else if (list.length > 0) {
       setSelected(list[0] ?? null);
     }
+    return list;
   }
 
   useEffect(() => {
+    // open chat from query param ?open=ID
+    const params = new URLSearchParams(window.location.search);
+    const open = params.get("open");
+    if (open) {
+      const id = parseInt(open, 10);
+      reload().then((list) => {
+        const found = (list || []).find((c) => c.id === id);
+        if (found) setSelected(found);
+      });
+      // remove query param to clean URL
+      params.delete("open");
+      const qs = params.toString();
+      setLocation(`/messages${qs ? `?${qs}` : ""}`);
+      return;
+    }
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -223,10 +241,15 @@ function DmDetail({
     if (!body.trim() || sending) return;
     setSending(true);
     try {
-      await customFetch(`/api/messages/${chat.id}`, {
+      const created = await customFetch<Msg>(`/api/messages/${chat.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body }),
+      });
+      setMessages((prev) => {
+        const merged = [...prev, created];
+        lastIdRef.current = Math.max(...merged.map((m) => m.id));
+        return merged;
       });
       setBody("");
     } finally {

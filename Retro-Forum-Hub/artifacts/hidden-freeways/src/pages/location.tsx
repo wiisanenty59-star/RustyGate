@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useParams, Link } from "wouter";
 import { useGetLocation, getGetLocationQueryKey } from "@workspace/api-client-react";
 import { formatDistanceToNow } from "date-fns";
@@ -14,6 +15,21 @@ export default function LocationDetail() {
   const { data, isLoading } = useGetLocation(id, {
     query: { enabled: !!id, queryKey: getGetLocationQueryKey(id) }
   });
+
+  const [mapStyle, setMapStyle] = useState<"dark" | "satellite">("dark");
+
+  useEffect(() => {
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem("urbexMapStyle") : null;
+    if (stored === "satellite" || stored === "dark") {
+      setMapStyle(stored);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("urbexMapStyle", mapStyle);
+    }
+  }, [mapStyle]);
 
   if (isLoading) {
     return (
@@ -42,6 +58,18 @@ export default function LocationDetail() {
       case 'high': return 'text-orange-500 border-orange-500/30 bg-orange-500/10';
       case 'extreme': return 'text-destructive border-destructive/30 bg-destructive/10';
       default: return 'text-muted-foreground';
+    }
+  };
+
+  const getSpotTypeLabel = (type: string) => {
+    switch (type) {
+      case 'rooftop': return 'Rooftop';
+      case 'tunnel': return 'Tunnel';
+      case 'industrial': return 'Industrial';
+      case 'hospital': return 'Hospital';
+      case 'drain': return 'Drain';
+      case 'military': return 'Military';
+      default: return 'Other';
     }
   };
 
@@ -76,6 +104,9 @@ export default function LocationDetail() {
               <Badge variant="outline" className={`rounded-none text-xs uppercase font-mono px-2 py-1 bg-background/50 backdrop-blur-sm ${getRiskColor(location.risk)}`}>
                 RISK: {location.risk}
               </Badge>
+              <Badge variant="outline" className="rounded-none text-xs uppercase font-mono px-2 py-1 border-border bg-background/50 backdrop-blur-sm">
+                {getSpotTypeLabel(location.spotType)}
+              </Badge>
             </div>
             
             <h1 className="font-serif text-3xl md:text-5xl text-primary tracking-widest uppercase mb-2">
@@ -102,7 +133,23 @@ export default function LocationDetail() {
             </div>
           </div>
           
-          <div className="h-[300px] lg:h-auto border-t lg:border-t-0 lg:border-l border-border/50 relative">
+          <div className="h-[300px] lg:h-[520px] border-t lg:border-t-0 lg:border-l border-border/50 relative">
+            <div className="absolute top-4 right-4 z-20 flex gap-2">
+              {(["dark", "satellite"] as const).map((style) => (
+                <button
+                  key={style}
+                  type="button"
+                  onClick={() => setMapStyle(style)}
+                  className={`rounded-none border px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-mono transition-colors ${
+                    mapStyle === style
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border/60 bg-background/70 text-muted-foreground hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  {style === "dark" ? "DARK" : "SAT"}
+                </button>
+              ))}
+            </div>
             <UrbexMap 
               center={[location.latitude, location.longitude]} 
               zoom={15} 
@@ -115,6 +162,7 @@ export default function LocationDetail() {
               }]}
               className="h-full w-full"
               interactive={false}
+              mapStyle={mapStyle}
             />
             <div className="absolute inset-0 pointer-events-none border-[12px] border-background/20 mix-blend-overlay" />
           </div>

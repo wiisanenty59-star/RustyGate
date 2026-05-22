@@ -9,6 +9,7 @@ import {
   usersTable,
   crewsTable,
   locationsTable,
+  notificationsTable,
 } from "@workspace/db";
 import {
   and,
@@ -18,6 +19,7 @@ import {
   gt,
   ilike,
   isNull,
+  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -112,7 +114,78 @@ router.post("/chat/rooms", requireAdmin, async (req, res): Promise<void> => {
 
   res.status(201).json(created);
 });
+router.post("/chat/rooms/:slug/messages", requireAuth, async (req, res): Promise<void> => {
+  const params = SendRoomMessageParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
 
+  const parsed = SendRoomMessageBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const user = (req as AuthedRequest).user;
+  const [room] = await db
+    .select()
+    .from(chatRoomsTable)
+    .where(eq(chatRoomsTable.slug, params.data.slug));
+
+  if (!room) {
+    res.status(404).json({ error: "Room not found" });
+    return;
+  }
+
+  const [created] = await db
+    .insert(roomMessagesTable)
+    .values({
+      roomId: room.id,
+      body: parsed.data.body,
+      authorId: user.id,
+    })
+    .returning();
+
+  if (!created) {
+    res.status(500).json({ error: "Could not send message" });
+    return;
+  }
+
+  const authors = await db
+    .select({ userId: roomMessagesTable.authorId })
+    .from(roomMessagesTable)
+    .where(
+      and(
+        eq(roomMessagesTable.roomId, room.id),
+        ne(roomMessagesTable.authorId, user.id),
+      ),
+    )
+    .groupBy(roomMessagesTable.authorId)
+    .limit(20);
+
+  if (authors.length > 0) {
+    await db.insert(notificationsTable).values(
+      authors.map((row) => ({
+        userId: row.userId,
+        actorId: user.id,
+        title: `New message in ${room.name}`,
+        body: `${user.username} wrote in ${room.name}`,
+        sourceType: "chat_room",
+        sourceId: room.id,
+        isRead: false,
+      })),
+    );
+  }
+
+  res.status(201).json({
+    id: created.id,
+    body: created.body,
+    authorId: created.authorId,
+    authorUsername: user.username,
+    createdAt: created.createdAt,
+  });
+});
 // ─── Edit room ────────────────────────────────────────────────────────────────
 
 router.patch("/chat/rooms/:slug", requireAdmin, async (req, res): Promise<void> => {

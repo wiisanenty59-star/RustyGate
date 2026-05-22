@@ -5,6 +5,7 @@ import {
   postVotesTable,
   threadsTable,
   postsTable,
+  notificationsTable,
 } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
 import {
@@ -89,13 +90,27 @@ router.post(
     const user = (req as AuthedRequest).user;
 
     const [thread] = await db
-      .select({ id: threadsTable.id })
+      .select({
+        id: threadsTable.id,
+        title: threadsTable.title,
+        authorId: threadsTable.authorId,
+      })
       .from(threadsTable)
       .where(eq(threadsTable.id, params.data.id));
     if (!thread) {
       res.status(404).json({ error: "Thread not found" });
       return;
     }
+
+    const [existingVote] = await db
+      .select({ value: threadVotesTable.value })
+      .from(threadVotesTable)
+      .where(
+        and(
+          eq(threadVotesTable.threadId, params.data.id),
+          eq(threadVotesTable.userId, user.id),
+        ),
+      );
 
     if (parsed.data.value === "none") {
       await db
@@ -118,6 +133,22 @@ router.post(
           target: [threadVotesTable.userId, threadVotesTable.threadId],
           set: { value: parsed.data.value },
         });
+
+      if (
+        parsed.data.value === "up" &&
+        thread.authorId !== user.id &&
+        existingVote?.value !== "up"
+      ) {
+        await db.insert(notificationsTable).values({
+          userId: thread.authorId,
+          actorId: user.id,
+          title: "Thread liked",
+          body: `${user.username} liked your thread: ${thread.title}`,
+          sourceType: "thread",
+          sourceId: thread.id,
+          isRead: false,
+        });
+      }
     }
 
     res.json(await loadThreadTotals(params.data.id, user.id));
@@ -141,13 +172,27 @@ router.post(
     const user = (req as AuthedRequest).user;
 
     const [post] = await db
-      .select({ id: postsTable.id })
+      .select({
+        id: postsTable.id,
+        authorId: postsTable.authorId,
+        body: postsTable.body,
+      })
       .from(postsTable)
       .where(eq(postsTable.id, params.data.id));
     if (!post) {
       res.status(404).json({ error: "Post not found" });
       return;
     }
+
+    const [existingVote] = await db
+      .select({ value: postVotesTable.value })
+      .from(postVotesTable)
+      .where(
+        and(
+          eq(postVotesTable.postId, params.data.id),
+          eq(postVotesTable.userId, user.id),
+        ),
+      );
 
     if (parsed.data.value === "none") {
       await db
@@ -170,6 +215,22 @@ router.post(
           target: [postVotesTable.userId, postVotesTable.postId],
           set: { value: parsed.data.value },
         });
+
+      if (
+        parsed.data.value === "up" &&
+        post.authorId !== user.id &&
+        existingVote?.value !== "up"
+      ) {
+        await db.insert(notificationsTable).values({
+          userId: post.authorId,
+          actorId: user.id,
+          title: "Post liked",
+          body: `${user.username} liked your post: ${String(post.body).slice(0, 120)}`,
+          sourceType: "post",
+          sourceId: post.id,
+          isRead: false,
+        });
+      }
     }
 
     res.json(await loadPostTotals(params.data.id, user.id));

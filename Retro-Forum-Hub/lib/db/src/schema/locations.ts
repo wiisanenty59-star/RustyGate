@@ -19,6 +19,7 @@ export const locationsTable = pgTable("locations", {
   city: text("city"),
   latitude: doublePrecision("latitude").notNull(),
   longitude: doublePrecision("longitude").notNull(),
+  spotType: text("spot_type").notNull().default("other"),
   status: text("status").notNull().default("active"),
   risk: text("risk").notNull().default("medium"),
   createdById: integer("created_by_id")
