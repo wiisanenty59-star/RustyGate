@@ -8,15 +8,15 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Send, ArrowLeft, Shield, Heart, UserX, MapPin } from "lucide-react";
 
-type LocationResult = {
+interface LocationResult {
   id: number;
   name: string;
   city: string | null;
   stateSlug: string | null;
   stateName: string | null;
-};
+}
 
-type RoomMessage = {
+interface RoomMessage {
   id: number;
   body: string;
   authorId: number;
@@ -25,7 +25,16 @@ type RoomMessage = {
   createdAt: string;
   likeCount: number;
   likedByMe: boolean;
-};
+}
+
+interface RoomMessagesResponse {
+  messages: Array<RoomMessage>;
+}
+
+interface LikeResponse {
+  liked: boolean;
+  count: number;
+}
 
 function renderBody(body: string) {
   const parts = body.split(/(\[loc:\d+:[^\]]+\])/g);
@@ -57,19 +66,20 @@ export default function ChatRoom() {
   const params = useParams();
   const slug = params.slug ?? "";
   const { data: user } = useGetCurrentUser();
-  const [messages, setMessages] = useState<RoomMessage[]>([]);
+  const [messages, setMessages] = useState<Array<RoomMessage>>([]);
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const lastIdRef = useRef<number>(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const [locationQuery, setLocationQuery] = useState("");
-  const [locationResults, setLocationResults] = useState<LocationResult[]>([]);
+  const [locationResults, setLocationResults] = useState<Array<LocationResult>>([]);
   const [showLocations, setShowLocations] = useState(false);
 
-  const typedUser = user as { role?: string; trustLevel?: number } | undefined;
+  const typedUser = user as (typeof user & { role?: string; trustLevel?: number }) | undefined;
   const isPrivileged =
-    typedUser?.role === "admin" || typedUser?.role === "moderator";
+    (typedUser?.role as string) === "admin" ||
+    (typedUser?.role as string) === "moderator";
 
   useEffect(() => {
     let cancelled = false;
@@ -79,7 +89,7 @@ export default function ChatRoom() {
           lastIdRef.current > 0
             ? `/api/chat/rooms/${slug}/messages?sinceId=${lastIdRef.current}`
             : `/api/chat/rooms/${slug}/messages`;
-        const res = await customFetch<{ messages: RoomMessage[] }>(url, {
+        const res = await customFetch<RoomMessagesResponse>(url, {
           method: "GET",
         });
         if (cancelled) return;
@@ -119,7 +129,7 @@ export default function ChatRoom() {
     }
     const t = setTimeout(async () => {
       try {
-        const res = await customFetch<LocationResult[]>(
+        const res = await customFetch<Array<LocationResult>>(
           `/api/chat/location-search?q=${encodeURIComponent(locationQuery)}`,
         );
         setLocationResults(Array.isArray(res) ? res : []);
@@ -175,7 +185,7 @@ export default function ChatRoom() {
 
   async function toggleLike(msgId: number) {
     try {
-      const res = await customFetch<{ liked: boolean; count: number }>(
+      const res = await customFetch<LikeResponse>(
         `/api/chat/rooms/${slug}/messages/${msgId}/like`,
         { method: "POST" },
       );

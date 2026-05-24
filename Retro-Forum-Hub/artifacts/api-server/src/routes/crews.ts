@@ -27,6 +27,7 @@ async function loadCrewWithMembers(crewId: number) {
       description: crewsTable.description,
       creatorId: crewsTable.creatorId,
       creatorUsername: usersTable.username,
+      channelSignal: crewsTable.channelSignal,
       roomId: crewsTable.roomId,
       meetupAt: crewsTable.meetupAt,
       meetupNote: crewsTable.meetupNote,
@@ -78,6 +79,90 @@ async function loadCrewWithMembers(crewId: number) {
     })),
   };
 }
+
+// Allow crew creators or crew-level admins to change member roles
+router.post(
+  "/crews/:id/members/:userId/role",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const id = Number.parseInt(req.params.id ?? "", 10);
+    const userId = Number.parseInt(req.params.userId ?? "", 10);
+    if (!id || !userId) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+    const user = (req as AuthedRequest).user;
+
+    const [crew] = await db.select().from(crewsTable).where(eq(crewsTable.id, id));
+    if (!crew) {
+      res.status(404).json({ error: "Crew not found" });
+      return;
+    }
+
+    const [callerMembership] = await db
+      .select()
+      .from(crewMembersTable)
+      .where(and(eq(crewMembersTable.crewId, id), eq(crewMembersTable.userId, user.id)));
+
+    const allowed = crew.creatorId === user.id || user.role === "admin" || (callerMembership && ["founder", "co_leader", "moderator"].includes(callerMembership.role));
+    if (!allowed) {
+      res.status(403).json({ error: "Not allowed" });
+      return;
+    }
+
+    const { role } = req.body as { role?: string };
+    if (!role || typeof role !== "string") {
+      res.status(400).json({ error: "role required" });
+      return;
+    }
+
+    await db
+      .update(crewMembersTable)
+      .set({ role })
+      .where(and(eq(crewMembersTable.crewId, id), eq(crewMembersTable.userId, userId)));
+
+    const [member] = await db
+      .select({ userId: crewMembersTable.userId, username: usersTable.username, trustLevel: usersTable.trustLevel, joinedAt: crewMembersTable.joinedAt, role: crewMembersTable.role })
+      .from(crewMembersTable)
+      .leftJoin(usersTable, eq(usersTable.id, crewMembersTable.userId))
+      .where(and(eq(crewMembersTable.crewId, id), eq(crewMembersTable.userId, userId)));
+
+    res.json(member);
+  },
+);
+
+// Set or update a crew's walkie-talkie channel signal
+router.post("/crews/:id/channel", requireAuth, async (req, res): Promise<void> => {
+  const id = Number.parseInt(req.params.id ?? "", 10);
+  if (!id) {
+    res.status(400).json({ error: "Invalid crew id" });
+    return;
+  }
+  const user = (req as AuthedRequest).user;
+
+  const [crew] = await db.select().from(crewsTable).where(eq(crewsTable.id, id));
+  if (!crew) {
+    res.status(404).json({ error: "Crew not found" });
+    return;
+  }
+
+  const [callerMembership] = await db
+    .select()
+    .from(crewMembersTable)
+    .where(and(eq(crewMembersTable.crewId, id), eq(crewMembersTable.userId, user.id)));
+
+  const allowed = crew.creatorId === user.id || user.role === "admin" || (callerMembership && ["founder", "co_leader"].includes(callerMembership.role));
+  if (!allowed) {
+    res.status(403).json({ error: "Not allowed" });
+    return;
+  }
+
+  const { channelSignal } = req.body as { channelSignal?: number | null };
+  await db.update(crewsTable).set({ channelSignal: channelSignal ?? null }).where(eq(crewsTable.id, id));
+
+  const full = await loadCrewWithMembers(id);
+  res.json(full);
+});
 
 router.get("/crews", requireAuth, async (req, res): Promise<void> => {
   const user = (req as AuthedRequest).user;

@@ -90,6 +90,9 @@ cd "$ROOT_DIR/artifacts/api-server"
 export DATABASE_URL="${DATABASE_URL:-postgres://$DB_USER:$DB_PASSWORD@127.0.0.1:$DB_PORT/$DB_NAME}"
 export SESSION_SECRET="${SESSION_SECRET:-$(openssl rand -hex 32)}"
 
+echo "Applying database schema..."
+yes '' | pnpm --dir "$ROOT_DIR/lib/db" exec drizzle-kit push --force --config ./drizzle.config.ts
+
 if [ "$RUN_FRONTEND" = true ]; then
   start_frontend
   pnpm run dev &

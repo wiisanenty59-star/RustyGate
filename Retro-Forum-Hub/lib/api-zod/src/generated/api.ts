@@ -108,7 +108,6 @@ export const GetStateBySlugResponse = zod.object({
       latitude: zod.number(),
       longitude: zod.number(),
       spotType: zod.enum(["rooftop", "tunnel", "industrial", "hospital", "drain", "military", "other"]),
-      spotType: zod.enum(["rooftop", "tunnel", "industrial", "hospital", "drain", "military", "other"]),
       status: zod.enum(["active", "demolished", "sealed", "watched"]),
       risk: zod.enum(["low", "medium", "high", "extreme"]),
       createdById: zod.number(),

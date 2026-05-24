@@ -99,6 +99,8 @@ export const crewsTable = pgTable("crews", {
   roomId: integer("room_id")
     .notNull()
     .references(() => chatRoomsTable.id, { onDelete: "cascade" }),
+  // optional walkie-talkie channel signal (numeric channel id)
+  channelSignal: integer("channel_signal"),
   meetupAt: timestamp("meetup_at", { withTimezone: true }),
   meetupNote: text("meetup_note"),
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -116,6 +118,8 @@ export const crewMembersTable = pgTable(
     userId: integer("user_id")
       .notNull()
       .references(() => usersTable.id, { onDelete: "cascade" }),
+    // role within the crew: founder, co_leader, moderator, member, etc.
+    role: text("role").notNull().default("member"),
     joinedAt: timestamp("joined_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

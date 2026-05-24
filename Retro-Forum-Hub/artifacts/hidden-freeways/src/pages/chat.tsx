@@ -18,19 +18,35 @@ import { Send, Hash, Lock, Shield, Heart, UserX, MapPin, Users, Radio, ChevronDo
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type ChatRoom = {
-  id: number; slug: string; name: string; description: string;
-  kind: string; minTrustLevel: number; memberCount: number;
+interface ChatRoom {
+  id: number;
+  slug: string;
+  name: string;
+  description: string;
+  kind: string;
+  minTrustLevel: number;
+  memberCount: number;
   lastMessageAt: string | null;
-};
-type CrewRoom = { id: number; name: string; roomId: number };
-type OnlineUser = { id: number; username: string; role: string; trustLevel?: number };
-type RoomMessage = {
-  id: number; body: string; authorId: number; authorUsername: string;
-  authorTrustLevel: number; createdAt: string; likeCount: number; likedByMe: boolean;
-};
-type LocationResult = { id: number; name: string; city: string | null; stateName: string | null };
-type PrivateChatSummary = { id: number; otherUsername: string; otherTrustLevel: number; lastMessageBody?: string | null; lastActivityAt: string };
+}
+
+interface CrewRoom { id: number; name: string; roomId: number }
+
+interface OnlineUser { id: number; username: string; role: string; trustLevel?: number }
+
+interface RoomMessage {
+  id: number;
+  body: string;
+  authorId: number;
+  authorUsername: string;
+  authorTrustLevel: number;
+  createdAt: string;
+  likeCount: number;
+  likedByMe: boolean;
+}
+
+interface LocationResult { id: number; name: string; city: string | null; stateName: string | null }
+
+interface PrivateChatSummary { id: number; otherUsername: string; otherTrustLevel: number; lastMessageBody?: string | null; lastActivityAt: string }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
